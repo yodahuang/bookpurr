@@ -1,7 +1,9 @@
+import re
 from collections.abc import Iterator
+from typing import Pattern
 
 
-def split_text(text: str, max_words: int = 100) -> Iterator[str]:
+def chunk_text(text: str, max_words: int) -> Iterator[str]:
     """
     Split text into chunks, each containing no more than max_words words.
 
@@ -30,9 +32,11 @@ def split_text(text: str, max_words: int = 100) -> Iterator[str]:
         >>> list(split_text("Short text. Very, very long text.", max_words=2))
         ['Short text.', 'Very,', 'very long text.']
     """
-    punct_levels: list[str | list[str]] = [
+    punct_levels: list[str | list[str | Pattern[str]]] = [
         "\n\n",
-        [".", "?", "!"],
+        [
+            re.compile(r"(?<!\d)\.|(?<=[^0-9])[?!]")
+        ],  # Don't match decimal points in numbers
         [";", ":"],
         [","],
     ]
@@ -77,14 +81,26 @@ def split_text(text: str, max_words: int = 100) -> Iterator[str]:
             splits: list[str] = []
 
             for punct in level:
-                parts = current.split(punct)
-                current = parts[-1]
-                for part in parts[:-1]:
-                    if punct == "\n\n":
-                        splits.append(part.strip())  # Don't append \n\n
-                    else:
-                        splits.append(part.strip() + punct)  # Keep other punctuation
+                if isinstance(punct, Pattern):
+                    parts = punct.split(current)
+                    current = parts[-1]
+                    for part in parts[:-1]:
+                        # Get the actual punctuation mark that was matched (. ? or !)
+                        splits.append(
+                            part.strip() + "."
+                        )  # We know it's always a period in this case
+                else:
+                    parts = current.split(punct)
+                    current = parts[-1]
+                    for part in parts[:-1]:
+                        if punct == "\n\n":
+                            splits.append(part.strip())  # Don't append \n\n
+                        else:
+                            splits.append(
+                                part.strip() + punct
+                            )  # Keep other punctuation
 
+            # Don't forget to append the last part with its punctuation if it exists
             if current.strip():
                 splits.append(current.strip())
 

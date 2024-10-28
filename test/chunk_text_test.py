@@ -1,6 +1,6 @@
 import pytest
 
-from bookpurr.chunk_text import split_text
+from bookpurr.chunk_text import chunk_text
 
 
 @pytest.mark.parametrize(
@@ -47,8 +47,18 @@ from bookpurr.chunk_text import split_text
                 "third comma part.",
             ],
         ),
+        # New test for numbers with decimal points
+        (
+            "An average human lives for 80.79 years. Then they die.",
+            4,
+            [
+                "An average human lives",
+                "for 80.79 years.",
+                "Then they die.",
+            ],
+        ),
     ],
 )
 def test_split_text(text: str, max_words: int, expected: list[str]):
     __tracebackhide__ = True
-    assert list(split_text(text, max_words)) == expected
+    assert list(chunk_text(text, max_words)) == expected
