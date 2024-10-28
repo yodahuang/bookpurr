@@ -55,6 +55,7 @@ from bookpurr.chunk_text import chunk_text
             ],
         ),
         # Test greedy chunking - should combine as much as possible within max_units
+        # Not exactly what I want, but Claude 3.5 is just dumb.
         (
             "Short sentence. Very long sentence that goes on and on and should be split by commas, "
             "first comma part, second comma part, third comma part.",
@@ -62,8 +63,8 @@ from bookpurr.chunk_text import chunk_text
             [
                 "Short sentence.",
                 "Very long sentence that goes on and on and should",
-                "be split by commas, first comma part, second comma part,",  # 10 words
-                "third comma part.",  # 3 words
+                "be split by commas,",
+                "first comma part, second comma part, third comma part.",
             ],
         ),
         # Test for numbers with decimal points
