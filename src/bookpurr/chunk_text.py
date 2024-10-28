@@ -23,7 +23,6 @@ def count_units(text: str) -> int:
 def chunk_text(text: str, max_units: int) -> Iterator[str]:
     """
     Split text into chunks using hierarchical approach, preserving semantic units.
-    Preserves original whitespace in the output chunks.
 
     The function follows these steps:
     1. First tries to keep text intact if it's under max_units
@@ -39,6 +38,13 @@ def chunk_text(text: str, max_units: int) -> Iterator[str]:
     For each punctuation level:
     - Tries to combine as many segments as possible within max_units limit
     - Only splits when necessary to meet max_units requirement
+    - When splitting is needed, splits at the last possible break point that keeps
+      the chunk under max_units (greedy approach)
+
+    Example:
+        With max_units=10 and text="a b c, d e f, g h i j k":
+        - Won't split at first comma because "a b c" is too small
+        - Will split after second comma: "a b c, d e f," (6 units) + "g h i j k" (5 units)
     """
     text = text.strip()
     if not text:
@@ -48,97 +54,146 @@ def chunk_text(text: str, max_units: int) -> Iterator[str]:
         yield text
         return
 
-    # Try punctuation-based splitting
+    # Try punctuation-based splitting in order
     punct_levels: list[str | list[str | Pattern[str]]] = [
         "\n\n",
-        [re.compile(r"(?<!\d)[.。]|(?<=[^0-9])[?？!！]")],
+        [re.compile(r"(?<!\d)[.。]|(?<=[^0-9])[?？!！]")],  # Don't match decimal points
         [";", ":", "；", "："],
         [",", "，"],
     ]
 
-    def split_and_merge(
-        text: str, punct: str | Pattern[str], max_units: int
-    ) -> list[str]:
-        """Split text on punctuation and merge greedily"""
-        # First get all splits
+    def split_by_punct(text: str, punct: str | Pattern[str]) -> list[str]:
         if isinstance(punct, Pattern):
             splits = []
             last_pos = 0
             for match in punct.finditer(text):
-                split_text = text[last_pos : match.end()].strip()
-                if split_text:
-                    splits.append(split_text)
+                splits.append(text[last_pos : match.end()])
                 last_pos = match.end()
             if last_pos < len(text):
-                splits.append(text[last_pos:].strip())
+                splits.append(text[last_pos:])
+            return [s.strip() for s in splits if s.strip()]
         else:
             parts = text.split(punct)
-            splits = []
-            for i, part in enumerate(parts):
-                if not part.strip():
-                    continue
-                # For last part, don't add punctuation
-                if i == len(parts) - 1:
-                    splits.append(part.strip())
-                else:
-                    splits.append(part.strip() + punct)
+            return [p.strip() + punct for p in parts[:-1] if p.strip()] + [
+                parts[-1].strip()
+            ]
 
-        # Try to merge splits optimally
+    def merge_greedily(splits: list[str]) -> list[str]:
+        """Try to combine as many splits as possible while staying under max_units"""
+        print("\nTrying to merge splits:", splits)
         result = []
-        buffer = []
-        buffer_units = 0
+        i = 0
+        while i < len(splits):
+            # Try to find the longest sequence of splits that fits in max_units
+            current_units = 0
+            j = i
+            while j < len(splits):
+                next_units = count_units(splits[j])
+                print(f"  Checking split {j}: '{splits[j]}' ({next_units} units)")
+                if current_units + next_units <= max_units:
+                    current_units += next_units
+                    print(f"    Can add it. Current total: {current_units}")
+                    j += 1
+                else:
+                    print(f"    Would exceed max_units ({max_units})")
+                    break
 
-        for split in splits:
-            split_units = count_units(split)
-
-            # If this split alone exceeds max_units, output buffer and add split directly
-            if split_units > max_units:
-                if buffer:
-                    result.append("".join(buffer))
-                    buffer = []
-                    buffer_units = 0
-                result.append(split)
-                continue
-
-            # Try to add to buffer
-            test_units = buffer_units + split_units
-            if test_units <= max_units:
-                buffer.append(split)
-                buffer_units = test_units
+            # If we found a valid sequence, add it
+            if j > i:
+                # Join with spaces for readability
+                merged = " ".join(s.strip() for s in splits[i:j])
+                print(f"  Adding merged chunk: '{merged}' ({current_units} units)")
+                result.append(merged)
+                i = j
             else:
-                # Output buffer and start new one
-                if buffer:
-                    result.append("".join(buffer))
-                buffer = [split]
-                buffer_units = split_units
+                # If even a single split is too big, pass it through
+                print(f"  Split too big, passing through: '{splits[i]}'")
+                result.append(splits[i])
+                i += 1
 
-        # Don't forget remaining buffer
-        if buffer:
-            result.append("".join(buffer))
+        print("Merge result:", result)
+        return result
+
+    def split_and_merge_recursively(
+        text: str, max_units: int, level_index: int = 0
+    ) -> list[str]:
+        """Split text recursively and merge greedily"""
+        print(f"\nRecursive call at level {level_index} with text: '{text}'")
+
+        # Base case: text fits in max_units
+        if count_units(text) <= max_units:
+            return [text]
+
+        # If we've tried all punctuation levels, fall back to word/character splitting
+        if level_index >= len(punct_levels):
+            return list(split_mixed_text(text, max_units))
+
+        # Get current punctuation level
+        level = punct_levels[level_index]
+        if isinstance(level, str):
+            level = [level]
+
+        # Try splitting at current punctuation level
+        splits = []
+        current = text
+        for punct in level:
+            if isinstance(punct, Pattern):
+                matches = list(punct.finditer(current))
+                if matches:
+                    last_pos = 0
+                    for match in matches:
+                        splits.append(current[last_pos : match.end()].strip())
+                        last_pos = match.end()
+                    current = (
+                        current[last_pos:].strip() if last_pos < len(current) else ""
+                    )
+            else:
+                parts = current.split(punct)
+                current = parts[-1].strip()
+                splits.extend(
+                    part.strip() + punct for part in parts[:-1] if part.strip()
+                )
+
+        if current:
+            splits.append(current)
+
+        if not splits:
+            # No splits at this level, try next level
+            return split_and_merge_recursively(text, max_units, level_index + 1)
+
+        # Try to combine splits greedily
+        result = []
+        i = 0
+        while i < len(splits):
+            # Look ahead to find maximum valid combination
+            best_end = i
+            combined = splits[i]
+            units = count_units(splits[i])
+
+            for j in range(i + 1, len(splits)):
+                next_units = count_units(splits[j])
+                if units + next_units <= max_units:
+                    combined = combined + " " + splits[j]
+                    units += next_units
+                    best_end = j
+                else:
+                    break
+
+            if units > max_units:
+                # If single split is too big, recurse to next level
+                result.extend(
+                    split_and_merge_recursively(splits[i], max_units, level_index + 1)
+                )
+                i += 1
+            else:
+                # Add the best combination we found
+                result.append(combined)
+                i = best_end + 1
 
         return result
 
-    # Try each punctuation level
-    for level in punct_levels:
-        if isinstance(level, str):
-            splits = split_and_merge(text, level, max_units)
-        else:
-            splits = [text]
-            for punct in level:
-                new_splits = []
-                for split in splits:
-                    if count_units(split) > max_units:
-                        new_splits.extend(split_and_merge(split, punct, max_units))
-                    else:
-                        new_splits.append(split)
-                splits = new_splits
-
-        if all(count_units(split) <= max_units for split in splits):
-            yield from splits
-            return
-
-    # If no punctuation splits worked, fall back to mixed text splitting
-    yield from split_mixed_text(text, max_units)
+    # Start the recursive process
+    yield from split_and_merge_recursively(text, max_units)
 
 
 def split_mixed_text(text: str, max_len: int) -> Iterator[str]:
