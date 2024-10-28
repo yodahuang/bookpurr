@@ -110,6 +110,10 @@ def generate(
             progress.print(f"Generated {generated_duration:.2f} seconds of audio.")
             yield wave
 
+            # If the chunk ends with "." or "。", add a pause there.
+            if text_chunk.endswith(".") or text_chunk.endswith("。"):
+                yield mx.zeros(SAMPLE_RATE // 2)
+
 
 def save_audio(waves: list[mx.array], output_path: Path) -> None:
     with output_path.open("wb") as output:
