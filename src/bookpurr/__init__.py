@@ -35,12 +35,24 @@ def main(
     if word_limit is not None:
         allowed_word_count = word_limit
         for i, chapter in enumerate(chapters):
-            chapter_word_count = len(chapter.split())
+            if contains_chinese(chapter):
+                # For Chinese text, count characters
+                chapter_words = list(chapter)
+            else:
+                # For non-Chinese text, split by words
+                chapter_words = chapter.split()
+
+            chapter_word_count = len(chapter_words)
             if chapter_word_count > allowed_word_count:
-                chapters[i] = chapter[:allowed_word_count]
+                # Join back the allowed number of words/chars
+                chapters[i] = (
+                    "".join(chapter_words[:allowed_word_count])
+                    if contains_chinese(chapter)
+                    else " ".join(chapter_words[:allowed_word_count])
+                )
                 chapters = chapters[: i + 1]
                 break
-            allowed_word_count -= len(chapter.split())
+            allowed_word_count -= chapter_word_count
 
     model = F5TTS.from_pretrained("lucasnewman/f5-tts-mlx")
 

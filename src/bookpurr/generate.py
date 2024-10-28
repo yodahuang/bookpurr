@@ -48,10 +48,10 @@ def generate(
     if ref_audio_path is None:
         is_cn_book = contains_chinese(generation_text)
         if is_cn_book:
-            data = pkgutil.get_data("bookpurr", "data/yanda-cn.wav")
+            data = pkgutil.get_data("bookpurr", "data/yanda-en.wav")
             ref_audio_text = "Some call me nature, others call me mother nature."
         else:
-            data = pkgutil.get_data("bookpurr", "data/yanda-en.wav")
+            data = pkgutil.get_data("bookpurr", "data/yanda-cn.wav")
             ref_audio_text = "有些人叫我自然，有些人叫我自然母亲。"
         if data is None:
             raise ValueError("Reference audio not found")
@@ -76,7 +76,6 @@ def generate(
         audio = audio * TARGET_RMS / rms
 
     text_chunks = list(chunk_text(generation_text, max_units=50))
-    print(f"{generation_text=}\n\n, {text_chunks=}")
 
     with Progress() as progress:
         for text_chunk in progress.track(text_chunks, description="Generating audio"):
