@@ -57,7 +57,9 @@ def chunk_text(text: str, max_units: int) -> Iterator[str]:
     # Define punctuation levels for splitting
     punct_levels = [
         "\n\n",
-        [re.compile(r"(?<!\d)[.。]|(?<=[^0-9])[?？!！]")],  # Don't match decimal points
+        [
+            re.compile(r"(?<![0-9])[.。](?![0-9])|[?？!！]")
+        ],  # Don't match decimal points
         [";", ":", "；", "："],
         [",", "，"],
     ]
@@ -82,32 +84,99 @@ def chunk_text(text: str, max_units: int) -> Iterator[str]:
     def merge_splits(splits: list[str]) -> list[str]:
         """Merge splits while respecting max_units limit"""
         result = []
-        current_chunk = []
-        current_units = 0
+        i = 0
 
-        for split in splits:
-            split_units = count_units(split)
+        print("\nStarting splits:", splits)
+        while i < len(splits):
+            # Look ahead to find optimal combination
+            best_end = i
+            best_combination = splits[i]
+            current_units = count_units(splits[i])
+            print(f"\nStarting with: {splits[i]} ({current_units} units)")
 
-            # If this split alone exceeds max_units, handle it separately
-            if split_units > max_units:
-                if current_chunk:
-                    result.append(" ".join(current_chunk))
-                result.extend(split_mixed_text(split, max_units))
+            # If even single split is too big, try to split it at any punctuation
+            if current_units > max_units:
+                print(f"Split too big, trying to split")
+                text_to_split = splits[i]
+
+                # Try all punctuation marks at once
+                all_puncts = [
+                    re.compile(
+                        r"(?<![0-9])[.。](?![0-9])|[?？!！]"
+                    ),  # Sentence endings
+                    ";",
+                    ":",
+                    "；",
+                    "：",  # Semicolons and colons
+                    ",",
+                    "，",  # Commas
+                ]
+
+                # Get all possible splits
+                subsplits = [text_to_split]
+                for punct in all_puncts:
+                    new_splits = []
+                    for part in subsplits:
+                        if count_units(part) > max_units:  # Only split if needed
+                            new_splits.extend(
+                                s for s in split_by_punct(part, punct) if s.strip()
+                            )
+                        else:
+                            new_splits.append(part)
+                    subsplits = new_splits
+
+                print(f"  Found splits: {subsplits}")
+
+                # Try to combine splits greedily
                 current_chunk = []
                 current_units = 0
+
+                for split in subsplits:
+                    split_units = count_units(split)
+                    if split_units > max_units:
+                        # If we have a current chunk, add it to results
+                        if current_chunk:
+                            result.append(" ".join(current_chunk))
+                            current_chunk = []
+                            current_units = 0
+                        # Split this oversized part
+                        result.extend(split_mixed_text(split, max_units))
+                    elif current_units + split_units <= max_units:
+                        current_chunk.append(split)
+                        current_units += split_units
+                    else:
+                        # Current chunk is full, start a new one
+                        if current_chunk:
+                            result.append(" ".join(current_chunk))
+                        current_chunk = [split]
+                        current_units = split_units
+
+                if current_chunk:
+                    result.append(" ".join(current_chunk))
+
+                i += 1
                 continue
 
-            # Try to add to current chunk
-            if current_units + split_units <= max_units:
-                current_chunk.append(split)
-                current_units += split_units
-            else:
-                result.append(" ".join(current_chunk))
-                current_chunk = [split]
-                current_units = split_units
+            # Try to combine with subsequent splits until we hit max_units
+            for j in range(i + 1, len(splits)):
+                test_combination = " ".join(splits[i : j + 1])
+                test_units = count_units(test_combination)
+                print(f"  Testing: '{test_combination}' ({test_units} units)")
 
-        if current_chunk:
-            result.append(" ".join(current_chunk))
+                if test_units <= max_units:
+                    best_combination = test_combination
+                    best_end = j
+                    current_units = test_units
+                    print(f"    ✓ Accepted")
+                else:
+                    print(f"    ✗ Would exceed limit")
+                    break
+
+            print(f"\nAdding: '{best_combination}' ({current_units} units)")
+            result.append(best_combination)
+            i = best_end + 1
+
+        print("\nFinal result:", result)
         return result
 
     # Try each punctuation level
