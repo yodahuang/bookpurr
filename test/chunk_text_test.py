@@ -17,10 +17,17 @@ from bookpurr.chunk_text import chunk_text
                 "into chunks.",
             ],
         ),
+        # Test that we don't split unnecessarily
         (
-            "A short paragraph.\n\nFollowed by another paragraph.",
+            "Short text. Another short text.",
+            5,
+            ["Short text. Another short text."],  # Should stay as one chunk
+        ),
+        # Test handling of spaces and newlines in Chinese
+        (
+            "这是 第一段。\n这是第二段。",  # Extra spaces and newlines
             100,
-            ["A short paragraph.\n\nFollowed by another paragraph."],
+            ["这是 第一段。\n这是第二段。"],  # Preserve original spacing
         ),
         # New tests for punctuation-based splitting
         (
@@ -47,7 +54,19 @@ from bookpurr.chunk_text import chunk_text
                 "third comma part.",
             ],
         ),
-        # New test for numbers with decimal points
+        # Test greedy chunking - should combine as much as possible within max_units
+        (
+            "Short sentence. Very long sentence that goes on and on and should be split by commas, "
+            "first comma part, second comma part, third comma part.",
+            10,
+            [
+                "Short sentence.",
+                "Very long sentence that goes on and on and should",
+                "be split by commas, first comma part, second comma part,",  # 10 words
+                "third comma part.",  # 3 words
+            ],
+        ),
+        # Test for numbers with decimal points
         (
             "An average human lives for 80.79 years. Then they die.",
             4,
@@ -56,6 +75,43 @@ from bookpurr.chunk_text import chunk_text
                 "for 80.79 years.",
                 "Then they die.",
             ],
+        ),
+        # Pure Chinese test cases
+        (
+            "我能吞下玻璃而不伤身体。",
+            3,
+            ["我能吞", "下玻璃", "而不伤", "身体。"],
+        ),
+        # Mixed Chinese/English test cases - split on language change and by character limit
+        (
+            "Hello World 你好世界",
+            2,
+            ["Hello World", "你好", "世界"],
+        ),
+        (
+            "Chapter 1 第一章。The story begins。",
+            3,
+            ["Chapter 1", "第一章。", "The story begins。"],
+        ),
+        (
+            "这是测试。Test text。这是中文。",
+            3,
+            ["这是测", "试。", "Test text。", "这是中", "文。"],
+        ),
+        (
+            "The cat and dog 猫和狗",
+            3,
+            ["The cat and", "dog", "猫和狗"],
+        ),
+        (
+            "Chapter 1\n\n第一章\n\nThe story\n\n故事",
+            3,
+            ["Chapter 1\n\n", "第一章\n\n", "The story\n\n", "故事"],
+        ),
+        (
+            "This is very long 这是非常长的句子",
+            4,
+            ["This is very long", "这是非常", "长的句子"],
         ),
     ],
 )

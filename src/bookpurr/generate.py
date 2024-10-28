@@ -75,7 +75,8 @@ def generate(
     if rms < TARGET_RMS:
         audio = audio * TARGET_RMS / rms
 
-    text_chunks = list(chunk_text(generation_text, max_words=50))
+    text_chunks = list(chunk_text(generation_text, max_units=50))
+    print(f"{generation_text=}\n\n, {text_chunks=}")
 
     with Progress() as progress:
         for text_chunk in progress.track(text_chunks, description="Generating audio"):
