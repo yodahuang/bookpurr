@@ -18,6 +18,7 @@ from bookpurr.chunk_text import chunk_text
 
 SAMPLE_RATE = 24_000
 TARGET_RMS = 0.1
+CN_SPEED_FACTOR = 0.6
 
 
 def contains_chinese(text: str) -> bool:
@@ -47,7 +48,7 @@ def generate(
 
     if ref_audio_path is None:
         is_cn_book = contains_chinese(generation_text)
-        if is_cn_book:
+        if not is_cn_book:
             data = pkgutil.get_data("bookpurr", "data/yanda-en.wav")
             ref_audio_text = "Some call me nature, others call me mother nature."
         else:
@@ -77,24 +78,26 @@ def generate(
 
     text_chunks = list(chunk_text(generation_text, max_units=50))
 
+    cond = mx.expand_dims(audio, axis=0)
     with Progress() as progress:
         for text_chunk in progress.track(text_chunks, description="Generating audio"):
             progress.print(text_chunk)
             # TODO: Pad with space and batch process.
             # See https://github.com/SWivid/F5-TTS/issues/264
             batch = [ref_audio_text + " " + text_chunk]
-            if contains_chinese(batch):
-                text = convert_char_to_pinyin(batch)
+            if contains_chinese(text_chunk):
+                batch = convert_char_to_pinyin(batch)
+                gen_speed = speed * CN_SPEED_FACTOR
             else:
-                text = batch
+                gen_speed = speed
 
             wave, _ = f5tts.sample(
-                mx.expand_dims(audio, axis=0),
-                text=text,
+                cond,
+                text=batch,
                 duration=None,
                 steps=steps,
                 method=method,
-                speed=speed,
+                speed=gen_speed,
                 cfg_strength=cfg_strength,
                 sway_sampling_coef=sway_sampling_coef,
                 seed=seed,

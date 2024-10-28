@@ -64,6 +64,7 @@ def main(
                 model=model,
                 ref_audio_path=ref_audio_path,
                 ref_audio_text=ref_audio_text,
+                speed=0.8,
             )
         )
         save_audio(waves, output_dir / f"chapter{i}.wav")
